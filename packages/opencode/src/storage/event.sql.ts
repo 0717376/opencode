@@ -1,7 +1,7 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
 
 export const EventSequenceTable = sqliteTable("event_sequence", {
-   aggregate_id: text().notNull().primaryKey(),
+  aggregate_id: text().notNull().primaryKey(),
   seq: integer().notNull(),
 })
 

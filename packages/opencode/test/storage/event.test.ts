@@ -1,7 +1,6 @@
 import { describe, test, expect, beforeEach } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
 import z from "zod"
-import { lazy } from "../../src/util/lazy"
 import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
 import { DatabaseEvent } from "../../src/storage/event"
@@ -35,20 +34,20 @@ describe("DatabaseEvent", () => {
   describe("run", () => {
     test(
       "inserts event row",
-      withInstance(async () => {
-        await DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
+      withInstance(() => {
+        DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
         expect(rows[0].name).toBe("item.created.v1")
-        expect(rows[0].aggregateId).toBe("msg_1")
+        expect(rows[0].aggregate_id).toBe("msg_1")
       }),
     )
 
     test(
       "increments seq per aggregate",
-      withInstance(async () => {
-        await DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
-        await DatabaseEvent.run(Created, { id: "msg_1", name: "second" })
+      withInstance(() => {
+        DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
+        DatabaseEvent.run(Created, { id: "msg_1", name: "second" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(2)
         expect(rows[1].seq).toBe(rows[0].seq + 1)
@@ -57,11 +56,11 @@ describe("DatabaseEvent", () => {
 
     test(
       "uses custom aggregate field from agg()",
-      withInstance(async () => {
-        await DatabaseEvent.run(Sent, { item_id: "msg_1", to: "james" })
+      withInstance(() => {
+        DatabaseEvent.run(Sent, { item_id: "msg_1", to: "james" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
-        expect(rows[0].aggregateId).toBe("msg_1")
+        expect(rows[0].aggregate_id).toBe("msg_1")
       }),
     )
 
@@ -70,7 +69,7 @@ describe("DatabaseEvent", () => {
       withInstance(async () => {
         const events: Array<{
           type: string
-          properties: { seq: number; aggregateId: string; data: { id: string; name: string } }
+          properties: { seq: number; aggregateID: string; data: { id: string; name: string } }
         }> = []
         const unsub = Bus.subscribeAll((event) => events.push(event))
 
@@ -81,7 +80,7 @@ describe("DatabaseEvent", () => {
           type: "item.created.v1",
           properties: {
             seq: 0,
-            aggregateId: "msg_1",
+            aggregateID: "msg_1",
             data: {
               id: "msg_1",
               name: "test",
@@ -97,17 +96,18 @@ describe("DatabaseEvent", () => {
   describe("replay", () => {
     test(
       "inserts event from external payload",
-      withInstance(async () => {
+      withInstance(() => {
         const id = Identifier.descending("message")
-        await DatabaseEvent.replay({
+        DatabaseEvent.replay({
+          id: "evt_1",
           type: "item.created.v1",
           seq: 0,
-          aggregateId: id,
+          aggregateID: id,
           data: { id, name: "replayed" },
         })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
-        expect(rows[0].aggregateId).toBe(id)
+        expect(rows[0].aggregate_id).toBe(id)
       }),
     )
 
@@ -116,16 +116,18 @@ describe("DatabaseEvent", () => {
       withInstance(() => {
         const id = Identifier.descending("message")
         DatabaseEvent.replay({
+          id: "evt_1",
           type: "item.created.v1",
           seq: 0,
-          aggregateId: id,
+          aggregateID: id,
           data: { id, name: "first" },
         })
         expect(() =>
           DatabaseEvent.replay({
+            id: "evt_1",
             type: "item.created.v1",
             seq: 5,
-            aggregateId: id,
+            aggregateID: id,
             data: { id, name: "bad" },
           }),
         ).toThrow(/Sequence mismatch/)
@@ -137,9 +139,10 @@ describe("DatabaseEvent", () => {
       withInstance(() => {
         expect(() =>
           DatabaseEvent.replay({
+            id: "evt_1",
             type: "unknown.event.1",
             seq: 0,
-            aggregateId: "x",
+            aggregateID: "x",
             data: {},
           }),
         ).toThrow(/Unknown event type/)

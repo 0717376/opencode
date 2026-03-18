@@ -59,9 +59,10 @@ async function run() {
     if (payload.type && payload.properties && payload.properties.data) {
       try {
         DatabaseEvent.replay({
+          id: payload.properties.id,
           type: payload.type,
           seq: payload.properties.seq,
-          aggregateId: payload.properties.aggregateId,
+          aggregateID: payload.properties.aggregateId,
           data: payload.properties.data,
         })
 
