@@ -22,7 +22,7 @@ const { Log } = await import("@/util/log")
 Log.init({ print: true, dev: true, level: "DEBUG" })
 
 const { Database } = await import("@/storage/db")
-const { DatabaseEvent } = await import("@/storage/event")
+const { SyncEvent } = await import("@/sync")
 const { parseSSE } = await import("@/control-plane/sse")
 
 const url = process.argv[2] || "http://127.0.0.1:4096/global/event"
@@ -49,7 +49,7 @@ async function run() {
 
   console.log("connected, listening for events...\n")
   const { default: sessionProjectors } = await import("@/session/projectors")
-  DatabaseEvent.init(sessionProjectors)
+  SyncEvent.init(sessionProjectors)
 
   Database.Client()
 
@@ -58,7 +58,7 @@ async function run() {
     const payload = event.payload
     if (payload.type && payload.properties && payload.properties.data) {
       try {
-        DatabaseEvent.replay({
+        SyncEvent.replay({
           id: payload.properties.id,
           type: payload.type,
           seq: payload.properties.seq,

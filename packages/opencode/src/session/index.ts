@@ -11,7 +11,7 @@ import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
-import { DatabaseEvent } from "../storage/event"
+import { SyncEvent } from "../sync"
 import type { SQL } from "../storage/db"
 import { SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -180,7 +180,7 @@ export namespace Session {
   export type GlobalInfo = z.output<typeof GlobalInfo>
 
   export const Event = {
-    Created: DatabaseEvent.define({
+    Created: SyncEvent.define({
       type: "session.created",
       version: "v1",
       aggregate: "sessionID",
@@ -189,7 +189,7 @@ export namespace Session {
         info: Info,
       }),
     }),
-    Shared: DatabaseEvent.define({
+    Shared: SyncEvent.define({
       type: "session.shared",
       version: "v1",
       aggregate: "sessionID",
@@ -198,7 +198,7 @@ export namespace Session {
         url: z.string().optional(),
       }),
     }),
-    Updated: DatabaseEvent.define({
+    Updated: SyncEvent.define({
       type: "session.updated",
       version: "v1",
       aggregate: "sessionID",
@@ -209,7 +209,7 @@ export namespace Session {
         }),
       }),
     }),
-    Deleted: DatabaseEvent.define({
+    Deleted: SyncEvent.define({
       type: "session.deleted",
       version: "v1",
       aggregate: "sessionID",
@@ -299,7 +299,7 @@ export namespace Session {
 
   export const touch = fn(Identifier.schema("session"), async (sessionID) => {
     const time = Date.now()
-    DatabaseEvent.run(Event.Updated, { sessionID, info: { time: { updated: time } } })
+    SyncEvent.run(Event.Updated, { sessionID, info: { time: { updated: time } } })
   })
 
   export async function createNext(input: {
@@ -327,7 +327,7 @@ export namespace Session {
     }
     log.info("created", result)
 
-    DatabaseEvent.run(Event.Created, { sessionID: result.id, info: result })
+    SyncEvent.run(Event.Created, { sessionID: result.id, info: result })
 
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
@@ -362,7 +362,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
 
-    DatabaseEvent.run(Event.Shared, { sessionID: id, url: share.url })
+    SyncEvent.run(Event.Shared, { sessionID: id, url: share.url })
 
     return share
   })
@@ -372,7 +372,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
 
-    DatabaseEvent.run(Event.Shared, { sessionID: id, url: undefined })
+    SyncEvent.run(Event.Shared, { sessionID: id, url: undefined })
   })
 
   export const setTitle = fn(
@@ -381,7 +381,7 @@ export namespace Session {
       title: z.string(),
     }),
     async (input) => {
-      DatabaseEvent.run(Event.Updated, { sessionID: input.sessionID, info: { title: input.title } })
+      SyncEvent.run(Event.Updated, { sessionID: input.sessionID, info: { title: input.title } })
     },
   )
 
@@ -391,7 +391,7 @@ export namespace Session {
       time: z.number().optional(),
     }),
     async (input) => {
-      DatabaseEvent.run(Event.Updated, { sessionID: input.sessionID, info: { time: { archived: input.time } } })
+      SyncEvent.run(Event.Updated, { sessionID: input.sessionID, info: { time: { archived: input.time } } })
     },
   )
 
@@ -401,7 +401,7 @@ export namespace Session {
       permission: PermissionNext.Ruleset,
     }),
     async (input) => {
-      DatabaseEvent.run(Event.Updated, {
+      SyncEvent.run(Event.Updated, {
         sessionID: input.sessionID,
         info: { permission: input.permission, time: { updated: Date.now() } },
       })
@@ -415,7 +415,7 @@ export namespace Session {
       summary: Info.shape.summary,
     }),
     async (input) => {
-      DatabaseEvent.run(Event.Updated, {
+      SyncEvent.run(Event.Updated, {
         sessionID: input.sessionID,
         info: {
           summary: input.summary,
@@ -427,7 +427,7 @@ export namespace Session {
   )
 
   export const clearRevert = fn(Identifier.schema("session"), async (sessionID) => {
-    DatabaseEvent.run(Event.Updated, {
+    SyncEvent.run(Event.Updated, {
       sessionID,
       info: {
         time: { updated: Date.now() },
@@ -442,7 +442,7 @@ export namespace Session {
       summary: Info.shape.summary,
     }),
     async (input) => {
-      DatabaseEvent.run(Event.Updated, {
+      SyncEvent.run(Event.Updated, {
         sessionID: input.sessionID,
         info: {
           time: { updated: Date.now() },
@@ -608,14 +608,14 @@ export namespace Session {
       }
       await unshare(sessionID).catch(() => {})
 
-      DatabaseEvent.run(Event.Deleted, { sessionID, info: session })
+      SyncEvent.run(Event.Deleted, { sessionID, info: session })
     } catch (e) {
       log.error(e)
     }
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
-    DatabaseEvent.run(MessageV2.Event.Updated, {
+    SyncEvent.run(MessageV2.Event.Updated, {
       sessionID: msg.sessionID,
       info: msg,
     })
@@ -629,7 +629,7 @@ export namespace Session {
       messageID: Identifier.schema("message"),
     }),
     async (input) => {
-      DatabaseEvent.run(MessageV2.Event.Removed, {
+      SyncEvent.run(MessageV2.Event.Removed, {
         sessionID: input.sessionID,
         messageID: input.messageID,
       })
@@ -644,7 +644,7 @@ export namespace Session {
       partID: Identifier.schema("part"),
     }),
     async (input) => {
-      DatabaseEvent.run(MessageV2.Event.PartRemoved, {
+      SyncEvent.run(MessageV2.Event.PartRemoved, {
         sessionID: input.sessionID,
         messageID: input.messageID,
         partID: input.partID,
@@ -656,7 +656,7 @@ export namespace Session {
   const UpdatePartInput = MessageV2.Part
 
   export const updatePart = fn(UpdatePartInput, async (part) => {
-    DatabaseEvent.run(MessageV2.Event.PartUpdated, {
+    SyncEvent.run(MessageV2.Event.PartUpdated, {
       sessionID: part.sessionID,
       part: structuredClone(part),
       time: Date.now(),

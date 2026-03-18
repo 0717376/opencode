@@ -3,9 +3,9 @@ import { tmpdir } from "../fixture/fixture"
 import z from "zod"
 import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
-import { DatabaseEvent } from "../../src/storage/event"
+import { SyncEvent } from "../../src/sync"
 import { Database } from "../../src/storage/db"
-import { EventTable } from "../../src/storage/event.sql"
+import { EventTable } from "../../src/sync/event.sql"
 import { Identifier } from "../../src/id/id"
 
 beforeEach(() => {
@@ -25,27 +25,27 @@ function withInstance(fn: () => void | Promise<void>) {
   }
 }
 
-describe("DatabaseEvent", () => {
-  const Created = DatabaseEvent.define({
+describe("SyncEvent", () => {
+  const Created = SyncEvent.define({
     type: "item.created",
     version: "v1",
     aggregate: "id",
     schema: z.object({ id: z.string(), name: z.string() }),
   })
-  const Sent = DatabaseEvent.define({
+  const Sent = SyncEvent.define({
     type: "item.sent",
     version: "v1",
     aggregate: "item_id",
     schema: z.object({ item_id: z.string(), to: z.string() }),
   })
 
-  DatabaseEvent.init([DatabaseEvent.project(Created, () => {}), DatabaseEvent.project(Sent, () => {})])
+  SyncEvent.init([SyncEvent.project(Created, () => {}), SyncEvent.project(Sent, () => {})])
 
   describe("run", () => {
     test(
       "inserts event row",
       withInstance(() => {
-        DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
+        SyncEvent.run(Created, { id: "msg_1", name: "first" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
         expect(rows[0].name).toBe("item.created.v1")
@@ -56,8 +56,8 @@ describe("DatabaseEvent", () => {
     test(
       "increments seq per aggregate",
       withInstance(() => {
-        DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
-        DatabaseEvent.run(Created, { id: "msg_1", name: "second" })
+        SyncEvent.run(Created, { id: "msg_1", name: "first" })
+        SyncEvent.run(Created, { id: "msg_1", name: "second" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(2)
         expect(rows[1].seq).toBe(rows[0].seq + 1)
@@ -67,7 +67,7 @@ describe("DatabaseEvent", () => {
     test(
       "uses custom aggregate field from agg()",
       withInstance(() => {
-        DatabaseEvent.run(Sent, { item_id: "msg_1", to: "james" })
+        SyncEvent.run(Sent, { item_id: "msg_1", to: "james" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
         expect(rows[0].aggregate_id).toBe("msg_1")
@@ -83,7 +83,7 @@ describe("DatabaseEvent", () => {
         }> = []
         const unsub = Bus.subscribeAll((event) => events.push(event))
 
-        DatabaseEvent.run(Created, { id: "msg_1", name: "test" })
+        SyncEvent.run(Created, { id: "msg_1", name: "test" })
 
         expect(events).toHaveLength(1)
         expect(events[0]).toEqual({
@@ -108,7 +108,7 @@ describe("DatabaseEvent", () => {
       "inserts event from external payload",
       withInstance(() => {
         const id = Identifier.descending("message")
-        DatabaseEvent.replay({
+        SyncEvent.replay({
           id: "evt_1",
           type: "item.created.v1",
           seq: 0,
@@ -125,7 +125,7 @@ describe("DatabaseEvent", () => {
       "throws on sequence mismatch",
       withInstance(() => {
         const id = Identifier.descending("message")
-        DatabaseEvent.replay({
+        SyncEvent.replay({
           id: "evt_1",
           type: "item.created.v1",
           seq: 0,
@@ -133,7 +133,7 @@ describe("DatabaseEvent", () => {
           data: { id, name: "first" },
         })
         expect(() =>
-          DatabaseEvent.replay({
+          SyncEvent.replay({
             id: "evt_1",
             type: "item.created.v1",
             seq: 5,
@@ -148,7 +148,7 @@ describe("DatabaseEvent", () => {
       "throws on unknown event type",
       withInstance(() => {
         expect(() =>
-          DatabaseEvent.replay({
+          SyncEvent.replay({
             id: "evt_1",
             type: "unknown.event.1",
             seq: 0,

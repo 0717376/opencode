@@ -1,5 +1,5 @@
 import { NotFoundError, eq, and } from "../storage/db"
-import { DatabaseEvent } from "@/storage/event"
+import { SyncEvent } from "@/sync"
 import { Session } from "./index"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
@@ -50,7 +50,7 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
 }
 
 export default [
-  DatabaseEvent.project(Session.Event.Created, (db, data) => {
+  SyncEvent.project(Session.Event.Created, (db, data) => {
     const existing = db
       .select({ id: ProjectTable.id })
       .from(ProjectTable)
@@ -71,13 +71,13 @@ export default [
     db.insert(SessionTable).values(Session.toRow(data.info)).run()
   }),
 
-  DatabaseEvent.project(Session.Event.Updated, (db, data) => {
+  SyncEvent.project(Session.Event.Updated, (db, data) => {
     const info = data.info
     const row = db.update(SessionTable).set(toPartialRow(info)).where(eq(SessionTable.id, data.sessionID)).returning().get()
     if (!row) throw new NotFoundError({ message: `Session not found: ${data.sessionID}` })
   }),
 
-  DatabaseEvent.project(Session.Event.Shared, (db, data) => {
+  SyncEvent.project(Session.Event.Shared, (db, data) => {
     const row = db
       .update(SessionTable)
       .set({ share_url: data.url })
@@ -87,11 +87,11 @@ export default [
     if (!row) throw new NotFoundError({ message: `Session not found: ${data.sessionID}` })
   }),
 
-  DatabaseEvent.project(Session.Event.Deleted, (db, data) => {
+  SyncEvent.project(Session.Event.Deleted, (db, data) => {
     db.delete(SessionTable).where(eq(SessionTable.id, data.sessionID)).run()
   }),
 
-  DatabaseEvent.project(MessageV2.Event.Updated, (db, data) => {
+  SyncEvent.project(MessageV2.Event.Updated, (db, data) => {
     const time_created = data.info.time.created
     const { id, sessionID, ...rest } = data.info
 
@@ -106,19 +106,19 @@ export default [
       .run()
   }),
 
-  DatabaseEvent.project(MessageV2.Event.Removed, (db, data) => {
+  SyncEvent.project(MessageV2.Event.Removed, (db, data) => {
     db.delete(MessageTable)
       .where(and(eq(MessageTable.id, data.messageID), eq(MessageTable.session_id, data.sessionID)))
       .run()
   }),
 
-  DatabaseEvent.project(MessageV2.Event.PartRemoved, (db, data) => {
+  SyncEvent.project(MessageV2.Event.PartRemoved, (db, data) => {
     db.delete(PartTable)
       .where(and(eq(PartTable.id, data.partID), eq(PartTable.session_id, data.sessionID)))
       .run()
   }),
 
-  DatabaseEvent.project(MessageV2.Event.PartUpdated, (db, data) => {
+  SyncEvent.project(MessageV2.Event.PartUpdated, (db, data) => {
     const { id, messageID, sessionID, ...rest } = data.part
 
     db.insert(PartTable)

@@ -1,6 +1,6 @@
 import sessionProjectors from "../session/projectors"
-import { DatabaseEvent } from "../storage/event"
+import { SyncEvent } from "../sync"
 
 export function initProjectors() {
-  DatabaseEvent.init(sessionProjectors)
+  SyncEvent.init(sessionProjectors)
 }

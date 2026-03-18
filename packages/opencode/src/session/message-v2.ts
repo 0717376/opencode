@@ -7,7 +7,7 @@ import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
 import { Database, eq, desc, inArray } from "@/storage/db"
-import { DatabaseEvent } from "../storage/event"
+import { SyncEvent } from "../sync"
 import { MessageTable, PartTable } from "./session.sql"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
@@ -449,7 +449,7 @@ export namespace MessageV2 {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: DatabaseEvent.define({
+    Updated: SyncEvent.define({
       type: "message.updated",
       version: "v1",
       aggregate: "sessionID",
@@ -458,7 +458,7 @@ export namespace MessageV2 {
         info: Info,
       }),
     }),
-    Removed: DatabaseEvent.define({
+    Removed: SyncEvent.define({
       type: "message.removed",
       version: "v1",
       aggregate: "sessionID",
@@ -467,7 +467,7 @@ export namespace MessageV2 {
         messageID: z.string(),
       }),
     }),
-    PartUpdated: DatabaseEvent.define({
+    PartUpdated: SyncEvent.define({
       type: "message.part.updated",
       version: "v1",
       aggregate: "sessionID",
@@ -487,7 +487,7 @@ export namespace MessageV2 {
         delta: z.string(),
       }),
     ),
-    PartRemoved: DatabaseEvent.define({
+    PartRemoved: SyncEvent.define({
       type: "message.part.removed",
       version: "v1",
       aggregate: "sessionID",

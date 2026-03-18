@@ -2,12 +2,12 @@ import z from "zod"
 import type { ZodObject } from "zod"
 import { Identifier } from "@/id/id"
 import { BusEvent } from "@/bus/bus-event"
-import { lazy } from "../util/lazy"
+import { Database, eq, max } from "@/storage/db"
 import { Bus } from "@/bus"
-import { Database, eq, max } from "./db"
+import { lazy } from "../util/lazy"
 import { EventSequenceTable, EventTable } from "./event.sql"
 
-export namespace DatabaseEvent {
+export namespace SyncEvent {
   export type Definition = {
     type: string
     properties: ZodObject<{ id: z.ZodString; seq: z.ZodNumber; aggregateID: z.ZodString; data: z.ZodObject }>
@@ -70,7 +70,7 @@ export namespace DatabaseEvent {
 
   function process<Def extends Definition>(def: Def, input: Event<Def>) {
     if (projectors == null) {
-      throw new Error("No projectors available. Call `DatabaseEvent.init` to install projectors")
+      throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
     }
 
     const projector = projectors.get(def)
@@ -137,7 +137,7 @@ export namespace DatabaseEvent {
     // This should never happen: we've enforced it via typescript in
     // the definition
     if (agg == null) {
-      throw new Error(`DatabaseEvent: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
+      throw new Error(`SyncEvent: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
     }
 
     Database.immediateTransaction((tx) => {
