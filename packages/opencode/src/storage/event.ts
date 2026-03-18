@@ -10,9 +10,9 @@ import { EventSequenceTable, EventTable } from "./event.sql"
 export namespace DatabaseEvent {
   export type Definition = {
     type: string
-    properties: ZodObject<{ seq: z.ZodNumber; aggregateID: z.ZodString; data: z.ZodObject }>
+    properties: ZodObject<{ id: z.ZodString; seq: z.ZodNumber; aggregateID: z.ZodString; data: z.ZodObject }>
     version: string
-    aggregateField: string
+    aggregate: string
   }
 
   export type Event<Def extends Definition = Definition> = {
@@ -37,34 +37,28 @@ export namespace DatabaseEvent {
     return version ? `${type}.${version}` : type
   }
 
-  export function define<Type extends string, Properties extends ZodObject<{ id: z.ZodString }>>(
-    type: Type,
-    version: string,
-    properties: Properties,
-  ) {
-    return agg("id").define(type, version, properties)
-  }
-
-  export function agg<F extends string>(aggregateField: F) {
-    return {
-      define<Type extends string, Data extends ZodObject<Record<F, z.ZodString>>>(
-        type: Type,
-        version: string,
-        data: Data,
-      ) {
-        const def = {
-          type,
-          properties: z.object({ seq: z.number(), aggregateID: z.string(), data }),
-          version,
-          aggregateField,
-        }
-
-        registry.set(versionedName(def.type, def.version), def)
-        BusEvent.define(versionedName(def.type, def.version), def.properties)
-
-        return def
-      },
+  export function define<
+    Type extends string,
+    Version extends string,
+    Agg extends string,
+    Schema extends ZodObject<Record<Agg, z.ZodString>>,
+  >(input: { type: Type; version: Version; aggregate: Agg; schema: Schema }) {
+    const def = {
+      type: input.type,
+      properties: z.object({
+        id: Identifier.schema("event"),
+        seq: z.number(),
+        aggregateID: z.string(),
+        data: input.schema,
+      }),
+      version: input.version,
+      aggregate: input.aggregate,
     }
+
+    registry.set(versionedName(def.type, def.version), def)
+    BusEvent.define(versionedName(def.type, def.version), def.properties)
+
+    return def
   }
 
   export function project<Def extends Definition>(
@@ -85,8 +79,6 @@ export namespace DatabaseEvent {
     }
 
     // idempotent: need to ignore any events already logged
-
-    console.log("setting seq", input.aggregateID, input.seq)
 
     Database.transaction((tx) => {
       projector(tx, input.data)
@@ -141,11 +133,11 @@ export namespace DatabaseEvent {
   }
 
   export function run<Def extends Definition>(def: Def, data: Event<Def>["data"]) {
-    const agg = (data as Record<string, string>)[def.aggregateField]
+    const agg = (data as Record<string, string>)[def.aggregate]
     // This should never happen: we've enforced it via typescript in
     // the definition
     if (agg == null) {
-      throw new Error(`DatabaseEvent: "${def.aggregateField}" required but not found: ${JSON.stringify(data)}`)
+      throw new Error(`DatabaseEvent: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
     }
 
     Database.immediateTransaction((tx) => {
@@ -161,7 +153,7 @@ export namespace DatabaseEvent {
 
       Database.effect(() => {
         const versionedDef = { ...def, type: versionedName(def.type, def.version) }
-        Bus.publish(versionedDef, { seq, aggregateID: agg, data } as z.output<Def["properties"]>)
+        Bus.publish(versionedDef, { id, seq, aggregateID: agg, data } as z.output<Def["properties"]>)
       })
     })
   }

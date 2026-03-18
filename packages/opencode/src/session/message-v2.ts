@@ -449,31 +449,34 @@ export namespace MessageV2 {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: DatabaseEvent.define(
-      "message.updated",
-      "v1",
-      z.object({
-        id: z.string(),
+    Updated: DatabaseEvent.define({
+      type: "message.updated",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: z.string(),
         info: Info,
       }),
-    ),
-    Removed: DatabaseEvent.agg("sessionID").define(
-      "message.removed",
-      "v1",
-      z.object({
+    }),
+    Removed: DatabaseEvent.define({
+      type: "message.removed",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
         sessionID: z.string(),
         messageID: z.string(),
       }),
-    ),
-    PartUpdated: DatabaseEvent.agg("sessionID").define(
-      "message.part.updated",
-      "v1",
-      z.object({
+    }),
+    PartUpdated: DatabaseEvent.define({
+      type: "message.part.updated",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
         sessionID: z.string(),
         part: Part,
         time: z.number(),
       }),
-    ),
+    }),
     PartDelta: BusEvent.define(
       "message.part.delta",
       z.object({
@@ -484,15 +487,16 @@ export namespace MessageV2 {
         delta: z.string(),
       }),
     ),
-    PartRemoved: DatabaseEvent.agg("sessionID").define(
-      "message.part.removed",
-      "v1",
-      z.object({
+    PartRemoved: DatabaseEvent.define({
+      type: "message.part.removed",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
         sessionID: z.string(),
         messageID: z.string(),
         partID: z.string(),
       }),
-    ),
+    }),
   }
 
   export const WithParts = z.object({

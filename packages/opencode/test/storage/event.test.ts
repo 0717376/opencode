@@ -26,8 +26,18 @@ function withInstance(fn: () => void | Promise<void>) {
 }
 
 describe("DatabaseEvent", () => {
-  const Created = DatabaseEvent.define("item.created", "v1", z.object({ id: z.string(), name: z.string() }))
-  const Sent = DatabaseEvent.agg("item_id").define("item.sent", "v1", z.object({ item_id: z.string(), to: z.string() }))
+  const Created = DatabaseEvent.define({
+    type: "item.created",
+    version: "v1",
+    aggregate: "id",
+    schema: z.object({ id: z.string(), name: z.string() }),
+  })
+  const Sent = DatabaseEvent.define({
+    type: "item.sent",
+    version: "v1",
+    aggregate: "item_id",
+    schema: z.object({ item_id: z.string(), to: z.string() }),
+  })
 
   DatabaseEvent.init([DatabaseEvent.project(Created, () => {}), DatabaseEvent.project(Sent, () => {})])
 
@@ -73,7 +83,7 @@ describe("DatabaseEvent", () => {
         }> = []
         const unsub = Bus.subscribeAll((event) => events.push(event))
 
-        await DatabaseEvent.run(Created, { id: "msg_1", name: "test" })
+        DatabaseEvent.run(Created, { id: "msg_1", name: "test" })
 
         expect(events).toHaveLength(1)
         expect(events[0]).toEqual({

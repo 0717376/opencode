@@ -31,16 +31,6 @@ import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
 
-// DatabaseEvent.define({
-//   type: "session.deleted",
-//   version: "v1",
-//   aggregateField: "sessionID",
-//   schema: z.object({
-//     sessionId: z.string(),
-//     info: Info,
-//   }),
-// })
-
 export namespace Session {
   const log = Log.create({ service: "session" })
 
@@ -190,41 +180,44 @@ export namespace Session {
   export type GlobalInfo = z.output<typeof GlobalInfo>
 
   export const Event = {
-    Created: DatabaseEvent.define(
-      "session.created",
-      "v1",
-      z.object({
-        id: z.string(),
+    Created: DatabaseEvent.define({
+      type: "session.created",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: z.string(),
         info: Info,
       }),
-    ),
-    Shared: DatabaseEvent.define(
-      "session.shared",
-      "v1",
-      z.object({
-        id: z.string(),
+    }),
+    Shared: DatabaseEvent.define({
+      type: "session.shared",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: z.string(),
         url: z.string().optional(),
       }),
-    ),
-    Touch: DatabaseEvent.define("session.touch", "v1", z.object({ id: z.string(), time: z.number() })),
-    Updated: DatabaseEvent.define(
-      "session.updated",
-      "v1",
-      z.object({
-        id: z.string(),
+    }),
+    Updated: DatabaseEvent.define({
+      type: "session.updated",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: z.string(),
         info: Info.partial().extend({
           time: Info.shape.time.partial().optional(),
         }),
       }),
-    ),
-    Deleted: DatabaseEvent.define(
-      "session.deleted",
-      "v1",
-      z.object({
-        id: z.string(),
+    }),
+    Deleted: DatabaseEvent.define({
+      type: "session.deleted",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: z.string(),
         info: Info,
       }),
-    ),
+    }),
     Diff: BusEvent.define(
       "session.diff",
       z.object({
@@ -306,7 +299,7 @@ export namespace Session {
 
   export const touch = fn(Identifier.schema("session"), async (sessionID) => {
     const time = Date.now()
-    DatabaseEvent.run(Event.Touch, { id: sessionID, time })
+    DatabaseEvent.run(Event.Updated, { sessionID, info: { time: { updated: time } } })
   })
 
   export async function createNext(input: {
@@ -334,7 +327,7 @@ export namespace Session {
     }
     log.info("created", result)
 
-    DatabaseEvent.run(Event.Created, { id: result.id, info: result })
+    DatabaseEvent.run(Event.Created, { sessionID: result.id, info: result })
 
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
@@ -369,7 +362,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
 
-    DatabaseEvent.run(Event.Shared, { id, url: share.url })
+    DatabaseEvent.run(Event.Shared, { sessionID: id, url: share.url })
 
     return share
   })
@@ -379,7 +372,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
 
-    DatabaseEvent.run(Event.Shared, { id, url: undefined })
+    DatabaseEvent.run(Event.Shared, { sessionID: id, url: undefined })
   })
 
   export const setTitle = fn(
@@ -388,7 +381,7 @@ export namespace Session {
       title: z.string(),
     }),
     async (input) => {
-      DatabaseEvent.run(Event.Updated, { id: input.sessionID, info: { title: input.title } })
+      DatabaseEvent.run(Event.Updated, { sessionID: input.sessionID, info: { title: input.title } })
     },
   )
 
@@ -398,7 +391,7 @@ export namespace Session {
       time: z.number().optional(),
     }),
     async (input) => {
-      DatabaseEvent.run(Event.Updated, { id: input.sessionID, info: { time: { archived: input.time } } })
+      DatabaseEvent.run(Event.Updated, { sessionID: input.sessionID, info: { time: { archived: input.time } } })
     },
   )
 
@@ -409,7 +402,7 @@ export namespace Session {
     }),
     async (input) => {
       DatabaseEvent.run(Event.Updated, {
-        id: input.sessionID,
+        sessionID: input.sessionID,
         info: { permission: input.permission, time: { updated: Date.now() } },
       })
     },
@@ -423,7 +416,7 @@ export namespace Session {
     }),
     async (input) => {
       DatabaseEvent.run(Event.Updated, {
-        id: input.sessionID,
+        sessionID: input.sessionID,
         info: {
           summary: input.summary,
           time: { updated: Date.now() },
@@ -435,7 +428,7 @@ export namespace Session {
 
   export const clearRevert = fn(Identifier.schema("session"), async (sessionID) => {
     DatabaseEvent.run(Event.Updated, {
-      id: sessionID,
+      sessionID,
       info: {
         time: { updated: Date.now() },
         revert: undefined,
@@ -450,7 +443,7 @@ export namespace Session {
     }),
     async (input) => {
       DatabaseEvent.run(Event.Updated, {
-        id: input.sessionID,
+        sessionID: input.sessionID,
         info: {
           time: { updated: Date.now() },
           summary: input.summary,
@@ -615,7 +608,7 @@ export namespace Session {
       }
       await unshare(sessionID).catch(() => {})
 
-      DatabaseEvent.run(Event.Deleted, { id: sessionID, info: session })
+      DatabaseEvent.run(Event.Deleted, { sessionID, info: session })
     } catch (e) {
       log.error(e)
     }
@@ -623,7 +616,7 @@ export namespace Session {
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     DatabaseEvent.run(MessageV2.Event.Updated, {
-      id: msg.sessionID,
+      sessionID: msg.sessionID,
       info: msg,
     })
 

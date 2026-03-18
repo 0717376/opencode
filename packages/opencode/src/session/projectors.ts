@@ -5,7 +5,7 @@ import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 
-type DeepPartial<T> = {
+export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K]
 }
 
@@ -73,35 +73,22 @@ export default [
 
   DatabaseEvent.project(Session.Event.Updated, (db, data) => {
     const info = data.info
-    const row = db.update(SessionTable).set(toPartialRow(info)).where(eq(SessionTable.id, data.id)).returning().get()
-    if (!row) throw new NotFoundError({ message: `Session not found: ${data.id}` })
+    const row = db.update(SessionTable).set(toPartialRow(info)).where(eq(SessionTable.id, data.sessionID)).returning().get()
+    if (!row) throw new NotFoundError({ message: `Session not found: ${data.sessionID}` })
   }),
 
   DatabaseEvent.project(Session.Event.Shared, (db, data) => {
     const row = db
       .update(SessionTable)
       .set({ share_url: data.url })
-      .where(eq(SessionTable.id, data.id))
+      .where(eq(SessionTable.id, data.sessionID))
       .returning()
       .get()
-    if (!row) throw new NotFoundError({ message: `Session not found: ${data.id}` })
-  }),
-
-  DatabaseEvent.project(Session.Event.Touch, (db, data) => {
-    const row = db
-      .update(SessionTable)
-      .set({ time_updated: data.time })
-      .where(eq(SessionTable.id, data.id))
-      .returning()
-      .get()
-    if (!row) throw new NotFoundError({ message: `Session not found: ${data.id}` })
-
-    // const info = Session.fromRow(row)
-    // Database.effect(() => Bus.publish(Event.Updated, { id: data.id, info }))
+    if (!row) throw new NotFoundError({ message: `Session not found: ${data.sessionID}` })
   }),
 
   DatabaseEvent.project(Session.Event.Deleted, (db, data) => {
-    db.delete(SessionTable).where(eq(SessionTable.id, data.id)).run()
+    db.delete(SessionTable).where(eq(SessionTable.id, data.sessionID)).run()
   }),
 
   DatabaseEvent.project(MessageV2.Event.Updated, (db, data) => {
