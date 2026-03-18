@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
 import z from "zod"
+import { lazy } from "../../src/util/lazy"
 import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
 import { DatabaseEvent } from "../../src/storage/event"
@@ -29,14 +30,13 @@ describe("DatabaseEvent", () => {
   const Created = DatabaseEvent.define("item.created", "v1", z.object({ id: z.string(), name: z.string() }))
   const Sent = DatabaseEvent.agg("item_id").define("item.sent", "v1", z.object({ item_id: z.string(), to: z.string() }))
 
-  DatabaseEvent.addProjector(Created, () => {})
-  DatabaseEvent.addProjector(Sent, () => {})
+  DatabaseEvent.init([DatabaseEvent.project(Created, () => {}), DatabaseEvent.project(Sent, () => {})])
 
   describe("run", () => {
     test(
       "inserts event row",
-      withInstance(() => {
-        DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
+      withInstance(async () => {
+        await DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
         expect(rows[0].name).toBe("item.created.v1")
@@ -46,9 +46,9 @@ describe("DatabaseEvent", () => {
 
     test(
       "increments seq per aggregate",
-      withInstance(() => {
-        DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
-        DatabaseEvent.run(Created, { id: "msg_1", name: "second" })
+      withInstance(async () => {
+        await DatabaseEvent.run(Created, { id: "msg_1", name: "first" })
+        await DatabaseEvent.run(Created, { id: "msg_1", name: "second" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(2)
         expect(rows[1].seq).toBe(rows[0].seq + 1)
@@ -57,8 +57,8 @@ describe("DatabaseEvent", () => {
 
     test(
       "uses custom aggregate field from agg()",
-      withInstance(() => {
-        DatabaseEvent.run(Sent, { item_id: "msg_1", to: "james" })
+      withInstance(async () => {
+        await DatabaseEvent.run(Sent, { item_id: "msg_1", to: "james" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
         expect(rows[0].aggregateId).toBe("msg_1")
@@ -67,20 +67,20 @@ describe("DatabaseEvent", () => {
 
     test(
       "emits events",
-      withInstance(() => {
+      withInstance(async () => {
         const events: Array<{
           type: string
           properties: { seq: number; aggregateId: string; data: { id: string; name: string } }
         }> = []
         const unsub = Bus.subscribeAll((event) => events.push(event))
 
-        DatabaseEvent.run(Created, { id: "msg_1", name: "test" })
+        await DatabaseEvent.run(Created, { id: "msg_1", name: "test" })
 
         expect(events).toHaveLength(1)
         expect(events[0]).toEqual({
           type: "item.created.v1",
           properties: {
-            seq: 1,
+            seq: 0,
             aggregateId: "msg_1",
             data: {
               id: "msg_1",
@@ -97,9 +97,9 @@ describe("DatabaseEvent", () => {
   describe("replay", () => {
     test(
       "inserts event from external payload",
-      withInstance(() => {
+      withInstance(async () => {
         const id = Identifier.descending("message")
-        DatabaseEvent.replay({
+        await DatabaseEvent.replay({
           type: "item.created.v1",
           seq: 0,
           aggregateId: id,

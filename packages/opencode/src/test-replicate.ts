@@ -3,8 +3,10 @@ import path from "path"
 import fs from "fs/promises"
 
 // Set XDG env vars BEFORE any src/ imports to isolate from real data
-const dir = path.join("/Users/james/tmp/opencode-test-replicate")
+// const dir = path.join("/Users/james/tmp/opencode-test-replicate")
+const dir = path.join(os.tmpdir(), "opencode-test-projection-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
+console.log(dir)
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
@@ -19,15 +21,11 @@ await fs.writeFile(path.join(cache, "version"), "14")
 const { Log } = await import("@/util/log")
 Log.init({ print: true, dev: true, level: "DEBUG" })
 
-const { Instance } = await import("@/project/instance")
 const { Database } = await import("@/storage/db")
 const { DatabaseEvent } = await import("@/storage/event")
 const { parseSSE } = await import("@/control-plane/sse")
 
-// register projectors so apply can find them
-await import("@/session/projectors")
-
-const url = process.argv[2] || "http://127.0.0.1:4096/global/db-event"
+const url = process.argv[2] || "http://127.0.0.1:4096/global/event"
 const ac = new AbortController()
 
 process.on("SIGINT", () => ac.abort())
@@ -50,14 +48,25 @@ async function run() {
   }
 
   console.log("connected, listening for events...\n")
+  const { default: sessionProjectors } = await import("@/session/projectors")
+  DatabaseEvent.init(sessionProjectors)
+
+  Database.Client()
 
   await parseSSE(res.body, ac.signal, (event: any) => {
-    console.log("[sse]", JSON.stringify(event, null, 2))
-    if (event.type && event.data) {
+    // console.log("[sse]", JSON.stringify(event, null, 2))
+    const payload = event.payload
+    if (payload.type && payload.properties && payload.properties.data) {
       try {
-        DatabaseEvent.replay(event)
-        console.log("[apply] ok:", event.type)
-        console.log("db path", Database.Path)
+        DatabaseEvent.replay({
+          type: payload.type,
+          seq: payload.properties.seq,
+          aggregateId: payload.properties.aggregateId,
+          data: payload.properties.data,
+        })
+
+        // console.log("[apply] ok:", event.type)
+        // console.log("db path", Database.Path)
       } catch (err) {
         console.error("[apply] error:", err)
       }
@@ -66,7 +75,7 @@ async function run() {
 
   console.log("\ndisconnected")
   Database.close()
-  // await fs.rm(dir, { recursive: true, force: true })
+  await fs.rm(dir, { recursive: true, force: true })
 }
 
 run()

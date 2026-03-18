@@ -81,6 +81,3 @@ Log.init({
   dev: true,
   level: "DEBUG",
 })
-
-// Install database projectors
-import "../src/session/projectors"

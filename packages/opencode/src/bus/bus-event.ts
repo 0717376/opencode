@@ -15,10 +15,6 @@ export namespace BusEvent {
     return result
   }
 
-  export function lookup(type: string) {
-    return registry.get(type)
-  }
-
   export function payloads() {
     return z
       .discriminatedUnion(

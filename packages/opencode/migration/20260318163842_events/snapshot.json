@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "393be879-52eb-44d5-9f01-6ae52dbded51",
+  "id": "64c94495-3f7d-4169-a078-2df22ca80057",
   "prevIds": [
     "fb311f30-9948-4131-b15c-7d308478a878"
   ],
@@ -919,12 +919,12 @@
       "table": "event_sequence"
     },
     {
-      "type": "integer",
-      "notNull": true,
+      "type": "text",
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "seq",
+      "name": "id",
       "entityType": "columns",
       "table": "event"
     },
@@ -934,7 +934,17 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "aggregateId",
+      "name": "aggregate_id",
+      "entityType": "columns",
+      "table": "event"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "seq",
       "entityType": "columns",
       "table": "event"
     },
@@ -1080,7 +1090,7 @@
     },
     {
       "columns": [
-        "aggregateId"
+        "aggregate_id"
       ],
       "tableTo": "event_sequence",
       "columnsTo": [
@@ -1089,7 +1099,7 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_event_aggregateId_event_sequence_aggregate_id_fk",
+      "name": "fk_event_aggregate_id_event_sequence_aggregate_id_fk",
       "entityType": "fks",
       "table": "event"
     },
@@ -1201,6 +1211,15 @@
       "nameExplicit": false,
       "name": "event_sequence_pk",
       "table": "event_sequence",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "event_pk",
+      "table": "event",
       "entityType": "pks"
     },
     {

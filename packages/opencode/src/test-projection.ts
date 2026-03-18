@@ -27,9 +27,6 @@ const { Session } = await import("@/session")
 const { Server } = await import("@/server/server")
 const { SessionPrompt } = await import("@/session/prompt")
 
-// register projectors
-await import("@/session/projectors")
-
 async function wait(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)

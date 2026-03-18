@@ -1,6 +1,8 @@
 import z from "zod"
 import type { ZodObject } from "zod"
+import { Identifier } from "@/id/id"
 import { BusEvent } from "@/bus/bus-event"
+import { lazy } from "../util/lazy"
 import { Bus } from "@/bus"
 import { Database, eq, max } from "./db"
 import { EventSequenceTable, EventTable } from "./event.sql"
@@ -8,21 +10,28 @@ import { EventSequenceTable, EventTable } from "./event.sql"
 export namespace DatabaseEvent {
   export type Definition = {
     type: string
-    properties: ZodObject<{ seq: z.ZodNumber; aggregateId: z.ZodString; data: z.ZodObject }>
+    properties: ZodObject<{ seq: z.ZodNumber; aggregateID: z.ZodString; data: z.ZodObject }>
     version: string
     aggregateField: string
   }
 
   export type Event<Def extends Definition = Definition> = {
+    id: string
     seq: number
-    aggregateId: string
+    aggregateID: string
     data: z.infer<Def["properties"]>["data"]
   }
 
   export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
-  const projectors = new Map<Definition, (db: Database.TxOrDb, data: unknown) => void>()
+  type ProjectorFunc = (db: Database.TxOrDb, data: unknown) => void
+
   const registry = new Map<string, Definition>()
+  let projectors: Map<Definition, ProjectorFunc> | undefined
+
+  export function init(pjs: Array<[Definition, ProjectorFunc]>) {
+    projectors = new Map(pjs)
+  }
 
   export function versionedName(type: string, version?: string) {
     return version ? `${type}.${version}` : type
@@ -45,7 +54,7 @@ export namespace DatabaseEvent {
       ) {
         const def = {
           type,
-          properties: z.object({ seq: z.number(), aggregateId: z.string(), data }),
+          properties: z.object({ seq: z.number(), aggregateID: z.string(), data }),
           version,
           aggregateField,
         }
@@ -58,14 +67,18 @@ export namespace DatabaseEvent {
     }
   }
 
-  export function addProjector<Def extends Definition>(
+  export function project<Def extends Definition>(
     def: Def,
     func: (db: Database.TxOrDb, data: Event<Def>["data"]) => void,
-  ) {
-    projectors.set(def, func as (db: Database.TxOrDb, data: unknown) => void)
+  ): [Definition, ProjectorFunc] {
+    return [def, func as ProjectorFunc]
   }
 
   function process<Def extends Definition>(def: Def, input: Event<Def>) {
+    if (projectors == null) {
+      throw new Error("No projectors available. Call `DatabaseEvent.init` to install projectors")
+    }
+
     const projector = projectors.get(def)
     if (!projector) {
       throw new Error(`Projector not found for event: ${def.type}`)
@@ -73,11 +86,13 @@ export namespace DatabaseEvent {
 
     // idempotent: need to ignore any events already logged
 
+    console.log("setting seq", input.aggregateID, input.seq)
+
     Database.transaction((tx) => {
       projector(tx, input.data)
       tx.insert(EventSequenceTable)
         .values({
-          aggregate_id: input.aggregateId,
+          aggregate_id: input.aggregateID,
           seq: input.seq,
         })
         .onConflictDoUpdate({
@@ -87,8 +102,9 @@ export namespace DatabaseEvent {
         .run()
       tx.insert(EventTable)
         .values({
+          id: input.id,
           seq: input.seq,
-          aggregateId: input.aggregateId,
+          aggregate_id: input.aggregateID,
           name: versionedName(def.type, def.version),
           data: input.data as Record<string, unknown>,
         })
@@ -105,21 +121,20 @@ export namespace DatabaseEvent {
   export function replay(event: SerializedEvent) {
     const def = registry.get(event.type)
     if (!def) {
-      console.log(registry)
       throw new Error(`Unknown event type: ${event.type}`)
     }
 
-    const maxSeq = Database.use((db) =>
+    const row = Database.use((db) =>
       db
-        .select({ val: max(EventTable.seq) })
-        .from(EventTable)
-        .where(eq(EventTable.aggregateId, event.aggregateId))
+        .select({ seq: EventSequenceTable.seq })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, event.aggregateID))
         .get(),
     )
 
-    const expected = maxSeq?.val ? maxSeq.val + 1 : 0
+    const expected = row ? row.seq + 1 : 0
     if (event.seq !== expected) {
-      throw new Error(`Sequence mismatch for aggregate "${event.aggregateId}": expected ${expected}, got ${event.seq}`)
+      throw new Error(`Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`)
     }
 
     process(def, event)
@@ -130,21 +145,23 @@ export namespace DatabaseEvent {
     // This should never happen: we've enforced it via typescript in
     // the definition
     if (agg == null) {
-      throw new Error(`DatabaseEvent: "${def.aggregateField}" required but not found: ${JSON.stringify(event)}`)
+      throw new Error(`DatabaseEvent: "${def.aggregateField}" required but not found: ${JSON.stringify(data)}`)
     }
 
     Database.immediateTransaction((tx) => {
+      const id = Identifier.ascending("workspace")
       const row = tx
         .select({ seq: EventSequenceTable.seq })
         .from(EventSequenceTable)
         .where(eq(EventSequenceTable.aggregate_id, agg))
         .get()
-      const seq = (row?.seq ?? 0) + 1
-      process(def, { seq, aggregateId: agg, data })
+      const seq = row?.seq != null ? row.seq + 1 : 0
+
+      process(def, { id, seq, aggregateID: agg, data })
 
       Database.effect(() => {
         const versionedDef = { ...def, type: versionedName(def.type, def.version) }
-        Bus.publish(versionedDef, { seq, aggregateId: agg, data } as z.output<Def["properties"]>)
+        Bus.publish(versionedDef, { seq, aggregateID: agg, data } as z.output<Def["properties"]>)
       })
     })
   }
