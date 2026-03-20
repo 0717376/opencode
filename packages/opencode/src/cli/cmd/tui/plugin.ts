@@ -243,7 +243,7 @@ async function applyPlugin(input: TuiPluginInput<CliRenderer>, load: Loaded) {
       },
     }),
   } satisfies TuiPluginInput<CliRenderer>["api"]
-  const opts = Config.pluginOptions(load.item) ?? null
+  const opts = Config.pluginOptions(load.item)
 
   for (const [name, value] of uniqueModuleEntries(load.mod)) {
     if (!value || typeof value !== "object") {
