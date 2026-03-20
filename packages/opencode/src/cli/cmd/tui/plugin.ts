@@ -24,6 +24,7 @@ import { PluginMeta } from "@/plugin/meta"
 import { addTheme, hasTheme } from "./context/theme"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal-plugin"
 
 type SlotProps<K extends keyof TuiSlotMap> = {
   name: K
@@ -32,9 +33,9 @@ type SlotProps<K extends keyof TuiSlotMap> = {
 } & TuiSlotMap[K]
 
 type Slot = <K extends keyof TuiSlotMap>(props: SlotProps<K>) => JSX.Element | null
-type InitInput = Omit<TuiPluginInput<CliRenderer>, "slots">
+type InitInput = Omit<TuiPluginInput<CliRenderer, JSX.Element>, "slots">
 type Loaded = {
-  item: Config.PluginSpec
+  item?: Config.PluginSpec
   spec: string
   mod: Record<string, unknown>
   install: TuiTheme["install"]
@@ -64,7 +65,7 @@ function getTuiSlotPlugin(value: unknown) {
   return value.slots
 }
 
-function isTuiPlugin(value: unknown): value is TuiPluginFn<CliRenderer> {
+function isTuiPlugin(value: unknown): value is TuiPluginFn<CliRenderer, JSX.Element> {
   return typeof value === "function"
 }
 
@@ -95,6 +96,17 @@ function pluginRoot(spec: string, target: string) {
   if (spec.startsWith("file://")) return path.dirname(fileURLToPath(spec))
   if (target.startsWith("file://")) return path.dirname(fileURLToPath(target))
   return target
+}
+
+function rootDir(root?: string) {
+  if (!root) return process.cwd()
+  if (root.startsWith("file://")) {
+    const file = fileURLToPath(root)
+    if (root.endsWith("/")) return file
+    return path.dirname(file)
+  }
+  if (path.isAbsolute(root)) return root
+  return path.resolve(process.cwd(), root)
 }
 
 function resolveThemePath(root: string, file: string) {
@@ -229,7 +241,40 @@ async function prepPlugin(config: TuiConfig.Info, item: Config.PluginSpec, retry
   }
 }
 
-async function applyPlugin(input: TuiPluginInput<CliRenderer>, load: Loaded) {
+function prepInternalPlugin(item: InternalTuiPlugin): Loaded {
+  const now = Date.now()
+  const spec = `internal:${item.name}`
+  const root = rootDir(item.root)
+
+  return {
+    spec,
+    mod: item.module,
+    install: makeInstallFn(
+      {
+        scope: "global",
+        source: item.root ?? spec,
+      },
+      root,
+      spec,
+    ),
+    init: {
+      state: "same",
+      entry: {
+        name: item.name,
+        source: "internal",
+        spec,
+        target: item.root ?? spec,
+        first_time: now,
+        last_time: now,
+        time_changed: now,
+        load_count: 1,
+        fingerprint: item.root ?? spec,
+      },
+    },
+  }
+}
+
+async function applyPlugin(input: TuiPluginInput<CliRenderer, JSX.Element>, load: Loaded) {
   const api = {
     command: input.api.command,
     route: input.api.route,
@@ -242,8 +287,10 @@ async function applyPlugin(input: TuiPluginInput<CliRenderer>, load: Loaded) {
         enumerable: true,
       },
     }),
-  } satisfies TuiPluginInput<CliRenderer>["api"]
-  const opts = Config.pluginOptions(load.item)
+    kv: input.api.kv,
+    state: input.api.state,
+  } satisfies TuiPluginInput<CliRenderer, JSX.Element>["api"]
+  const opts = load.item ? Config.pluginOptions(load.item) : undefined
 
   for (const [name, value] of uniqueModuleEntries(load.mod)) {
     if (!value || typeof value !== "object") {
@@ -318,7 +365,7 @@ export namespace TuiPlugin {
     return loaded
   }
 
-  async function load(input: TuiPluginInput<CliRenderer>) {
+  async function load(input: TuiPluginInput<CliRenderer, JSX.Element>) {
     const dir = process.cwd()
 
     await Instance.provide({
@@ -329,6 +376,14 @@ export namespace TuiPlugin {
         const deps: Deps = {}
 
         try {
+          for (const item of INTERNAL_TUI_PLUGINS) {
+            log.info("loading internal tui plugin", { name: item.name })
+            const entry = prepInternalPlugin(item)
+            await applyPlugin(input, entry).catch((error) => {
+              log.error("failed to load internal tui plugin", { name: item.name, error })
+            })
+          }
+
           const loaded = await Promise.all(plugins.map((item) => prepPlugin(config, item)))
 
           for (let i = 0; i < plugins.length; i++) {
