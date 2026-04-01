@@ -1,0 +1,12 @@
+{
+  "name": "opencode-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run script/build.ts --single",
+    "build:prod": "bun run script/build.ts --single --production"
+  },
+  "dependencies": {
+    "opencode": "workspace:*"
+  }
+}
