@@ -80,6 +80,41 @@ export const InstanceRoutes = (app?: Hono) =>
       },
     )
     .post(
+      "/instance/chdir",
+      describeRoute({
+        summary: "Change the server's working directory",
+        description:
+          "Swap process.cwd() and drop directory-scoped instance caches. " +
+          "Used by multi-tenant warm-pool deployments alongside /instance/rebind: " +
+          "when a pooled container is reassigned to a new user, chdir points " +
+          "file operations at the user's workspace. Subsequent requests without " +
+          "an explicit ?directory / x-opencode-directory resolve via the new cwd.",
+        operationId: "instance.chdir",
+        responses: {
+          200: {
+            description: "Directory changed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          directory: z.string().min(1).describe("Absolute path to the target working directory"),
+        }),
+      ),
+      async (c) => {
+        const { directory } = c.req.valid("json")
+        await Instance.disposeAll()
+        process.chdir(directory)
+        return c.json(true)
+      },
+    )
+    .post(
       "/instance/rebind",
       describeRoute({
         summary: "Rebind instance to a new SQLite database",
