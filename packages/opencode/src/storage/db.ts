@@ -13,7 +13,6 @@ import { readFileSync, readdirSync, existsSync } from "fs"
 import { Flag } from "../flag/flag"
 import { CHANNEL } from "../installation/meta"
 import { InstanceState } from "@/effect/instance-state"
-import { iife } from "@/util/iife"
 import { init } from "#db"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
@@ -35,13 +34,18 @@ export namespace Database {
     return path.join(Global.Path.data, `opencode-${safe}.db`)
   }
 
-  export const Path = iife(() => {
+  function computePath() {
     if (Flag.OPENCODE_DB) {
       if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
       return path.join(Global.Path.data, Flag.OPENCODE_DB)
     }
     return getChannelPath()
-  })
+  }
+
+  // Mutable so Database.rebind() can swap the active SQLite file at runtime
+  // (used by the warm-pool assign flow). Client is lazy and re-reads Path on
+  // next use after Client.reset(), so existing call sites keep working.
+  export let Path = computePath()
 
   export type Transaction = SQLiteTransaction<"sync", void>
 
@@ -82,6 +86,8 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
+  let clientLoaded = false
+
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
 
@@ -112,12 +118,31 @@ export namespace Database {
       migrate(db, entries)
     }
 
+    clientLoaded = true
     return db
   })
 
   export function close() {
-    Client().$client.close()
+    if (clientLoaded) {
+      Client().$client.close()
+      clientLoaded = false
+    }
     Client.reset()
+  }
+
+  /**
+   * Swap the active SQLite file at runtime. Used by the warm-pool assign
+   * flow: a pooled container serves any user, and on assignment we point
+   * Database at the user's persistent DB file without restarting the process.
+   *
+   * Safe to call before Client has ever been opened (no-op close).
+   * Callers should also invoke Instance.disposeAll() to drop any
+   * directory-scoped caches that may reference the old DB.
+   */
+  export function rebind(newPath: string) {
+    log.info("rebinding database", { from: Path, to: newPath })
+    close()
+    Path = newPath
   }
 
   export type TxOrDb = Transaction | Client
