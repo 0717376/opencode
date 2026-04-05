@@ -26,6 +26,7 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
+import { Database } from "../storage/db"
 import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
@@ -75,6 +76,39 @@ export const InstanceRoutes = (app?: Hono) =>
       }),
       async (c) => {
         await Instance.dispose()
+        return c.json(true)
+      },
+    )
+    .post(
+      "/instance/rebind",
+      describeRoute({
+        summary: "Rebind instance to a new SQLite database",
+        description:
+          "Dispose all directory-scoped instance caches and swap the active SQLite file. " +
+          "Used by multi-tenant warm-pool deployments to reassign a running server to a " +
+          "different user without restarting the process. The next request opens the new DB lazily.",
+        operationId: "instance.rebind",
+        responses: {
+          200: {
+            description: "Instance rebound",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          db: z.string().min(1).describe("Absolute path to the target SQLite file"),
+        }),
+      ),
+      async (c) => {
+        const { db } = c.req.valid("json")
+        await Instance.disposeAll()
+        Database.rebind(db)
         return c.json(true)
       },
     )
