@@ -331,6 +331,8 @@ export namespace LLM {
         metadata: {
           userId: cfg.username ?? "unknown",
           sessionId: input.sessionID,
+          "langfuse.session.id": input.sessionID,
+          "langfuse.user.id": cfg.username ?? "unknown",
         },
       },
     })

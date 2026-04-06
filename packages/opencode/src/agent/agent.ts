@@ -346,6 +346,7 @@ export namespace Agent {
               isEnabled: cfg.experimental?.openTelemetry,
               metadata: {
                 userId: cfg.username ?? "unknown",
+                "langfuse.user.id": cfg.username ?? "unknown",
               },
             },
             temperature: 0.3,
