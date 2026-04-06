@@ -344,8 +344,10 @@ export namespace Agent {
           const params = {
             experimental_telemetry: {
               isEnabled: cfg.experimental?.openTelemetry,
+              functionId: "agent-generate",
               metadata: {
                 userId: cfg.username ?? "unknown",
+                "langfuse.trace.name": "agent-generate",
                 "langfuse.user.id": cfg.username ?? "unknown",
               },
             },

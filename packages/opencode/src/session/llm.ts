@@ -328,9 +328,12 @@ export namespace LLM {
       }),
       experimental_telemetry: {
         isEnabled: cfg.experimental?.openTelemetry,
+        functionId: input.agent.name,
         metadata: {
           userId: cfg.username ?? "unknown",
           sessionId: input.sessionID,
+          agent: input.agent.name,
+          "langfuse.trace.name": input.agent.name,
           "langfuse.session.id": input.sessionID,
           "langfuse.user.id": cfg.username ?? "unknown",
         },
