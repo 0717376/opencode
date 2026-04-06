@@ -3,6 +3,22 @@ import { Server } from "../../opencode/src/server/server"
 import { Flag } from "../../opencode/src/flag/flag"
 import { Log } from "../../opencode/src/util/log"
 
+// ── OpenTelemetry → Langfuse ──
+// Registers a TracerProvider BEFORE any AI SDK call so that
+// experimental_telemetry spans are actually exported.
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+  const { NodeSDK } = await import("@opentelemetry/sdk-node")
+  const { OTLPTraceExporter } = await import("@opentelemetry/exporter-trace-otlp-http")
+  const { Resource } = await import("@opentelemetry/resources")
+  const sdk = new NodeSDK({
+    resource: new Resource({
+      "service.name": process.env.OTEL_SERVICE_NAME || "opencode",
+    }),
+    traceExporter: new OTLPTraceExporter(),
+  })
+  sdk.start()
+}
+
 declare const OPENCODE_VERSION: string
 
 if (process.argv.includes("--version") || process.argv.includes("-v")) {

@@ -90,6 +90,10 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
+    "@opentelemetry/resources": "2.6.1",
+    "@opentelemetry/sdk-node": "0.214.0",
+    "@opentelemetry/semantic-conventions": "1.40.0",
     "typescript": "catalog:"
   },
   "repository": {
