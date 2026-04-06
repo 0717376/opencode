@@ -9,11 +9,8 @@ import { Log } from "../../opencode/src/util/log"
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   const { NodeSDK } = await import("@opentelemetry/sdk-node")
   const { OTLPTraceExporter } = await import("@opentelemetry/exporter-trace-otlp-http")
-  const { Resource } = await import("@opentelemetry/resources")
   const sdk = new NodeSDK({
-    resource: new Resource({
-      "service.name": process.env.OTEL_SERVICE_NAME || "opencode",
-    }),
+    serviceName: process.env.OTEL_SERVICE_NAME || "opencode",
     traceExporter: new OTLPTraceExporter(),
   })
   sdk.start()
