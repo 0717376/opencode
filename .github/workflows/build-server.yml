@@ -1,0 +1,48 @@
+name: Build opencode-server
+
+on:
+  push:
+    branches: [gigawork/server-sqlite-rebind]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --ignore-scripts
+
+      - name: Build opencode-server (all platforms)
+        working-directory: packages/opencode-server
+        run: bun run script/build.ts --production
+
+      - name: List artifacts
+        run: ls -lhR packages/opencode-server/dist/
+
+      - name: Upload linux-x64
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-server-linux-x64
+          path: packages/opencode-server/dist/opencode-server-linux-x64/bin/opencode-server
+
+      - name: Upload linux-arm64
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-server-linux-arm64
+          path: packages/opencode-server/dist/opencode-server-linux-arm64/bin/opencode-server
+
+      - name: Create Release
+        if: github.ref == 'refs/heads/gigawork/server-sqlite-rebind'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          files: |
+            packages/opencode-server/dist/opencode-server-linux-x64/bin/opencode-server
+          make_latest: true
